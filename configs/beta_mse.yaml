@@ -1,0 +1,100 @@
+# Beta-vs-MSE landscape distance study.
+#
+# Read by BOTH scripts/datagen/gen_beta_mse_distance.py and
+# scripts/plotting/plot_beta_mse_distance.py, so the ladder is defined exactly
+# once. Every argparse default in those two scripts comes from a key here.
+#
+# NOTE on the flag-generation convention: these scripts use hand-written
+# argparse rather than the `_parse_args`-from-YAML auto-flag pattern, because
+# `opt_bounds` is two-valued and `params` is variadic -- `type=type(v)` turns a
+# list default into `type=list` and argparse shreds "-1.5 1.5" into single
+# characters (the trap README_studies.md documents). Same deliberate deviation
+# as gen_region_success_scores.py; see configs/studies/beta_mse_distance.yaml.
+
+channel_type: Pospischil
+
+# --- the sweep ---------------------------------------------------------------
+
+# Ideal-trace seed. Drawn through the same PRNG stream as generate_losses.py,
+# including the split spent on `amps`, so a given seed's ideal params match the
+# landscapes already on disk.
+seed: 0
+
+# MUST stay the window the landscapes were swept over. Scoring a wider region
+# than was swept is exactly what invalidated data/optimization-scores.jsonl v1.
+opt_bounds: [-1.5, 1.5]
+
+# 91^3 = 753571 grid points per unit.
+opt_samples: 91
+
+# Grid points per jitted call.
+batch_size: 512
+
+# --- outputs -----------------------------------------------------------------
+
+save_path: ./data/beta_mse_distance
+plot_path: ./plots/beta_mse_distance
+
+# Pinned encoder set. Built once by --build_manifest and then read by every
+# array task, so all 56 units score the identical ladder even if more models
+# finish training while the array is draining.
+encoder_manifest: ./data/beta_mse_distance/encoder_manifest.json
+
+# --- the ladder --------------------------------------------------------------
+
+# The rungs.
+ladder_betas: [0.0, 0.05, 0.1, 0.15, 0.2]
+
+# VAE training seeds per rung. One (beta, training seed) draw is noisy -- a
+# single 3-D landscape gave a clean beta=0 separation but no monotone trend
+# above it -- so every beta carries several independently trained encoders and
+# the analysis averages over them.
+ladder_train_seeds: [1234, 4321, 5678, 9876]
+
+# Everything a ladder encoder must agree on. `beta` and `seed` are the two axes
+# varied; every other hyperparameter is fixed, and a run is only admitted to the
+# ladder if its own config.yaml matches this template exactly. Stated here
+# rather than copied from one blessed run, so what "comparable" means is
+# explicit and a stray run with a different latent_dim can never silently join
+# the study.
+ladder_template:
+  trace_data: Pospischil
+  vae_type: TimeVAEBase
+  latent_dim: 64
+  activation: gelu
+  normalizer_type: ZScoreGlobal
+  masking: false
+  mask_width_ms: 10.0
+  epochs: 25
+  batch_size: 128
+  learning_rate: 0.0008
+  train_split: 0.95
+  max_valid: 100000
+  vals_per_epoch: 20
+  model_params:
+    conv_layers: [50, 100, 200]
+    kernel_size: 3
+    stride: 2
+
+# --- metrics and plotting thresholds ----------------------------------------
+
+# Percentile anchor for `unit_robust`. Min-max divides by the global min/max, so
+# one extreme grid point rescales a whole landscape; measured over 56 subsets
+# that cost the beta=0 encoder its win (most MSE-like by rank agreement, 55/56,
+# yet the widest min-max spread of any beta: sd 0.011 vs 0.003-0.007).
+unit_robust_pct: [1.0, 99.0]
+
+# A trace whose ideal is this flat (mV) is not spiking; every loss is then
+# comparing two near-flat lines and the comparison says nothing about the
+# encoder. Records below this are dropped by the plotter.
+min_ideal_v_range: 20.0
+
+# Below this, the middle 98% of a min-max'd landscape occupies so little of
+# [0, 1] that a handful of extreme grid points are setting the scale. Flagged,
+# not dropped.
+min_p98_span: 0.05
+
+# The headline metric: Spearman rank agreement with the MSE landscape. Invariant
+# to how a landscape maps onto [0, 1], which is the property the optimizer
+# actually consumes.
+rank_key: feat_spearman_vs_mse

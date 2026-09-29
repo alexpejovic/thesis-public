@@ -1,0 +1,277 @@
+# Region-of-success optimization score: plotting knobs.
+#
+# Read by every scripts/plotting/plot_region_*.py, so the camps, the ladders,
+# the baseline and the output paths are defined exactly once. The SCORE itself
+# is defined in scripts/datagen/gen_region_success_scores.py -- the plotters
+# import `ladder_score` from there rather than restating it, so nothing here can
+# make a figure disagree with `--check`.
+#
+# NOTE on the flag-generation convention: these scripts use hand-written argparse
+# rather than the `_parse_args`-from-YAML auto-flag pattern, because `ladders`,
+# `camps` and `contrasts` are list- and dict-valued -- `type=type(v)` turns a
+# list default into `type=list` and argparse shreds the tokens into single
+# characters (the trap README_studies.md documents). Same deliberate deviation
+# as gen_region_success_scores.py and configs/beta_mse.yaml.
+
+# --- inputs ------------------------------------------------------------------
+
+# The study output. One row per (optimizer, loss, 3-param set), appended by
+# every study that targets gen_region_success_scores.py.
+score_path: ./data/optimization-region-scores.jsonl
+
+# Losses dropped from every figure before anything else -- the budget grouping,
+# the counts and the ordering all see the same set of arms.
+#
+# EMPTY ON PURPOSE as of 2026-08-30. It used to drop the three `encoder-act-*`
+# arms, because a single flat set of figures had to span two unrelated studies
+# writing into one store, and an extra loss moved `set_order` (a median over
+# whichever losses are present) and `spread_over_noise` (a property of the loss
+# SET). Camps replace that: every figure now loads only its own camp's arms, so
+# an unrelated study landing in the store cannot move a number. Use this only
+# for a loss that is genuinely bad data.
+exclude_losses: []
+
+# --- outputs -----------------------------------------------------------------
+
+plot_path: ./plots/opt_region_scores
+
+# --- the statistic -----------------------------------------------------------
+
+# WHICH stored distance matrix every score is computed from. `raw_d_best` is the
+# distance from the truth to the BEST iterate of the run -- "could this loss
+# find the neuron" -- and it is the headline for every figure here.
+#
+# This changed on 2026-08-30, from `raw_d_final`. The reason is in
+# claude-tasks/2026-08-28-region-success-score.md: the inherited polyak setup
+# diverges on most starts (median final distance 2.94 against a median start of
+# 1.77) while its median BEST distance is 1.56, so a final-iterate score is
+# largely measuring how far a diverging optimizer wandered after passing the
+# truth. Scoring the best iterate asks the landscape question instead of the
+# step-size question. `raw_d_final` is still stored on every row and still
+# appears as a diagnostic number in the sidecars; it is no longer plotted.
+score_matrix: raw_d_best
+
+# The reference bar drawn in every camp. MSE under ZScoreGlobal applies the same
+# two dataset-wide constants the encoders were trained under, so an
+# encoder-to-MSE gap is about the encoder and not about the preprocessing.
+baseline_loss: mse-zscore
+
+# --- which optimizer the camps are drawn under -------------------------------
+
+# `auto` applies the rule below; a literal name (polyak / adam / rmsprop /
+# jaxley-polyak) pins it and skips the rule. Either way the choice and the full
+# ranking go into every figure's JSON sidecar, so no figure can quietly assume a
+# different winner than another.
+best_optimizer: auto
+
+best_optimizer_rule:
+  # Pooled over these losses only -- the spine every optimizer arm is run on.
+  # Ranking over "whatever rows exist" would reward the arm that happens to have
+  # been run on the easier losses.
+  over_losses: [mse-zscore, encoder-zscore-2, encoder-zscore]
+  # C5's comparability limit. An arm whose between-loss escape-fraction spread
+  # exceeds this is not facing its losses equally, so its ranking of them is not
+  # trustworthy however high it scores; it is disqualified rather than silently
+  # winning. The 2026-08-29 activation study failed exactly this on polyak
+  # (0.135 spread, relu 0.625 against mse-zscore 0.489).
+  max_escape_spread: 0.10
+
+# --- the camps ---------------------------------------------------------------
+
+# A camp is one question, drawn as one small group of figures. `losses` is the
+# camp's arms in drawing order; `contrasts` are its within-camp paired
+# comparisons as [a, b, label], positive mean difference = b scores higher (the
+# order the older `contrasts:` key used, kept so the sign convention does not
+# change under anyone's feet).
+#
+# The `optimizer` camp is the odd one: it varies the OPTIMIZER and holds the
+# loss set fixed, so it carries `axis: optimizer` and an `optimizers` list
+# instead of `contrasts`.
+camps:
+  masking:
+    title: Masking vs no masking
+    losses: [encoder-zscore-mask, encoder-zscore-2, encoder-zscore]
+    contrasts:
+      - [encoder-zscore-mask, encoder-zscore-2, masked vs unmasked (08-17)]
+      - [encoder-zscore-mask, encoder-zscore, masked vs unmasked (08-12)]
+      - [encoder-zscore, encoder-zscore-2, "replicate: unmasked vs unmasked"]
+
+  activation:
+    title: Activation function
+    losses: [encoder-act-relu, encoder-act-gelu, encoder-act-elu]
+    contrasts:
+      - [encoder-act-relu, encoder-act-gelu, relu vs gelu]
+      - [encoder-act-relu, encoder-act-elu, relu vs elu]
+      - [encoder-act-gelu, encoder-act-elu, gelu vs elu]
+
+  beta:
+    title: KL weight (beta)
+    # THIS CAMP IS DRAWN UNDER ADAM, not under the globally-best arm.
+    #
+    # Measured 2026-08-31 over all four arms. beta = 0.00 vs beta = 0.20, paired
+    # over the 56 subsets, best iterate:
+    #
+    #   polyak         +0.1835  p=7.6e-11     <- and beta=0 is BELOW CHANCE here
+    #   jaxley-polyak  +0.1658  p=7.5e-11     <- and below chance here too
+    #   rmsprop        +0.0146  p=2.3e-05
+    #   adam           +0.0019  p=0.79        <- not significant
+    #
+    # Under adam the whole ladder spans 0.1361-0.1419, i.e. 1.5x the 0.0038
+    # retraining floor, and beta = 0.00 is the HIGHEST rung of the five. Its
+    # escape fraction under adam is 0.014, so it does not diverge there at all.
+    # The polyak ladder was measuring polyak blowing up on a low-beta loss, and
+    # `--check` says so twice over: C3 puts beta=0.00/polyak and
+    # beta=0.00/jaxley-polyak below chance as whole arms, and C8 fails for both.
+    # spearman(S_polyak, S_adam) is only +0.444 on these losses against +0.93
+    # elsewhere -- the arms do not even agree which triplets are hard.
+    #
+    # Drawing this camp under polyak would put a 0.15-wide artifact on a report
+    # figure. adam is the one exactly loss-scale-invariant arm and therefore the
+    # only one that cannot manufacture this. See `beta_arms` for all four side
+    # by side, which is the figure that justifies this line.
+    optimizer: adam
+    # The five rungs of configs/beta_mse.yaml at training seed 5678.
+    #
+    # The top rung is `encoder-zscore-2`, NOT a name of its own: its checkpoint
+    # 2026_08_17_14_02_29_129424 IS the beta = 0.20 / seed 5678 encoder, and it
+    # is already registered under that name as the unmasked arm of the masking
+    # camp. Registering the same datestr twice would draw one encoder as two
+    # arms. `member_labels` is what makes it read as a beta rung here.
+    losses:
+      - encoder-beta-0.00
+      - encoder-beta-0.05
+      - encoder-beta-0.10
+      - encoder-beta-0.15
+      - encoder-zscore-2
+    member_labels:
+      encoder-zscore-2: beta 0.20
+      encoder-beta-0.00: beta 0.00
+      encoder-beta-0.05: beta 0.05
+      encoder-beta-0.10: beta 0.10
+      encoder-beta-0.15: beta 0.15
+    # Drawn on the sequential ramp in plot_style.BETA_RAMP rather than the
+    # categorical per-loss colours: beta is an ordered axis and should read as
+    # one without consulting the legend.
+    color_ramp: beta
+    # Every rung against the beta = 0 rung, which is the plain-autoencoder end
+    # of the ladder and the only rung with no KL pressure at all.
+    contrasts:
+      - [encoder-beta-0.00, encoder-beta-0.05, b0.00 vs b0.05]
+      - [encoder-beta-0.00, encoder-beta-0.10, b0.00 vs b0.10]
+      - [encoder-beta-0.00, encoder-beta-0.15, b0.00 vs b0.15]
+      - [encoder-beta-0.00, encoder-zscore-2, b0.00 vs b0.20]
+
+  optimizer:
+    title: Optimizer
+    axis: optimizer
+    optimizers: [polyak, adam, jaxley-polyak, rmsprop]
+    # The spine: the MSE floor, the unmasked encoder every other camp
+    # references, and its config-identical replicate -- so this camp carries its
+    # own noise floor.
+    losses: [mse-zscore, encoder-zscore-2, encoder-zscore]
+
+  # The beta ladder crossed with the optimizer, added 2026-08-31. Not a
+  # duplicate of the `beta` camp: that one draws the ladder under ONE arm and
+  # asks "does the KL weight help", while this one holds the ladder fixed and
+  # varies the arm, which is the only way to see whether the ladder's ordering
+  # is a property of the landscapes or of polyak.
+  #
+  # It exists because the polyak-only run came out monotone in beta AND monotone
+  # in escape fraction (0.938 at beta = 0 down to 0.531 at the top), so every
+  # contrast carried an escape gap of 0.24-0.41 against a 0.10 limit. If the
+  # ordering holds under adam -- the one exactly loss-scale-invariant arm -- it
+  # is about the landscapes. If it collapses, it was polyak diverging.
+  #
+  # `axis: optimizer`, so plot_region_optimizers.py draws it: grouped bars of
+  # rung x arm, the divergence diagnostics per arm, and each arm's per-cell
+  # scores against adam's. No new figure script.
+  beta_arms:
+    title: KL weight across optimizers
+    axis: optimizer
+    optimizers: [polyak, adam, jaxley-polyak, rmsprop]
+    losses:
+      - encoder-beta-0.00
+      - encoder-beta-0.05
+      - encoder-beta-0.10
+      - encoder-beta-0.15
+      - encoder-zscore-2
+    member_labels:
+      encoder-zscore-2: beta 0.20
+      encoder-beta-0.00: beta 0.00
+      encoder-beta-0.05: beta 0.05
+      encoder-beta-0.10: beta 0.10
+      encoder-beta-0.15: beta 0.15
+
+# --- the noise floor ---------------------------------------------------------
+
+# Three encoders whose config.yaml files are byte-identical -- same
+# ZScoreGlobal, same gelu, masking off, same KL weight -- differing only in the
+# non-determinism of training. The spread of their mean scores is the floor any
+# claimed effect has to clear. Measured on the final-iterate score: 0.0038 under
+# adam, 0.0184 under polyak.
+#
+# Note this is a floor for the beta camp too: all three sit at the ladder's
+# beta = 0.20 rung, so their spread is three independent draws of one rung.
+noise_floor_group: [encoder-zscore, encoder-zscore-2, encoder-act-gelu]
+
+# --- comparisons ACROSS camps ------------------------------------------------
+
+# Two arms in different camps differ in more than one thing at once, so a gap
+# between them is only worth drawing when it is large and reliable. Every
+# cross-camp pair is computed; only the ones clearing both gates below are
+# drawn, and the full table -- survivors and suppressed alike -- goes into the
+# figure's JSON sidecar so nothing is hidden, only un-drawn.
+cross_camp:
+  alpha: 0.05
+  # Holm-Bonferroni over the whole cross-camp family (39 pairs at the camps
+  # above). Uncorrected, ~2 of 39 null comparisons would clear p < 0.05 by
+  # construction, which is exactly the kind of cross-over this gate exists to
+  # keep off a figure.
+  correction: holm
+  # AND the absolute mean difference must exceed `noise_floor_group`'s spread.
+  # Significance alone is not enough here: the paired test is over 56 subsets
+  # and detects differences far smaller than retraining the same encoder moves
+  # the score.
+  require_over_noise_floor: true
+  # AND the two arms must escape the box at similar rates. This is check C5's
+  # statistic applied per PAIR: two losses whose runs leave the box at very
+  # different rates are not facing the same effective optimizer, so part of the
+  # gap between them is about the optimizer rather than the landscape. It is not
+  # hypothetical -- under polyak `mse-zscore` escapes on 0.489 of starts and
+  # `encoder-act-relu` on 0.625, so every encoder-vs-MSE pair is over this limit
+  # while the activation contrasts among themselves are well inside it. Same
+  # 0.10 as `best_optimizer_rule.max_escape_spread`, and for the same reason.
+  max_escape_gap: 0.10
+
+# --- the radius ladders ------------------------------------------------------
+
+# `default` MUST stay gen_region_success_scores.SUCCESS_RADII -- it is the
+# ladder every stored `region_score` was computed on, and the plotters assert
+# that recomputing it from `raw_d_final` reproduces the stored value exactly.
+# The others exist to show the conclusion does not depend on the choice; the
+# measurement on the 448 legacy betweenset rows was that separation rises
+# monotonically as the ladder loosens (see the task doc's table 3).
+ladders:
+  default: [0.09375, 0.1875, 0.375, 0.75, 1.5]
+  legacy5: [0.1, 0.173, 0.375, 0.433, 0.866]
+  drop_loosest: [0.09375, 0.1875, 0.375, 0.75]
+  tight3: [0.09375, 0.1875, 0.375]
+  single_basin_wide: [0.375]
+  single_loosest: [1.5]
+
+# --- statistics --------------------------------------------------------------
+
+# Resamples for the paired-difference confidence interval. The p-value stays a
+# Wilcoxon signed-rank test, matching `--check`; the CI is bootstrap because a
+# mean difference over 56 paired sets has no clean closed form here.
+bootstrap_n: 10000
+bootstrap_seed: 0
+
+# How the 56 parameter sets are ordered along every x axis. One shared order
+# across all figures, or panels cannot be read against each other. Computed on
+# `score_matrix`, so the order is a best-iterate order like everything else.
+set_order_by: region_score
+set_order_optimizer: polyak
+
+# The contrast `plot_region_ladder.py` tabulates across the six ladders above.
+default_pair: [encoder-zscore-mask, encoder-zscore-2]

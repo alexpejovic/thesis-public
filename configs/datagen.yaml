@@ -1,0 +1,76 @@
+default_params:
+  HH:
+    gNa: 0.12
+    gK: 0.036
+    gLeak: 0.0003
+    eNa: 50.0
+    eK: -77.0
+    eLeak: -54.3
+  Pospischil:
+    # Leak
+    gLeak: 1e-4
+    eLeak: -70.0
+    # Na
+    gNa: 50e-3
+    # K
+    gK: 5e-3
+    # Km
+    gKm: 0.004e-3
+    taumax: 4000.0
+    # CaL
+    gCaL: 0.1e-3
+    # CaT
+    gCaT: 0.4e-4
+    vx: 2.0
+    # Global
+    eNa: 50.0
+    eK: -90.0
+    eCa: 120.0
+    vt: -60.0
+param_bounds:
+  HH:
+    gNa: [0.05, 0.2] # log
+    gK: [0.015, 0.06] # log
+    gLeak: [0.00015, 0.0006] # log
+    eNa: [40.0, 80.0] # log
+    eK: [-80.0, -60.0] # lin
+    eLeak: [-80.0, -50.0] # lin
+  Pospischil: # From Efficient_ident_Beck_2022
+    # Leak
+    gLeak: [0.00001, 0.0001]
+    eLeak: [-85.0, -50.0] # lin
+    # Na
+    gNa: [0.006, 0.1]
+    # K
+    gK: [0.006, 0.01]
+    # Km
+    gKm: [0.000001, 0.001]
+    # CaL
+    gCaL: [0.00005, 0.0002]
+    taumax: [100.0, 3000.0]
+    # CaT: Not implemented in Efficient_ident_Beck_2022?
+    # gCaT: 0.4e-4 # tbd
+    # vx: 2.0 # tbd
+    # Global
+    vt: [-75.0, -55.0] # lin
+  Pospischil-bad:
+    gNa: [5.0, 80.0]
+    gK: [0.025, 0.1]
+param_consts:
+  HH: {}
+  Pospischil:
+    eNa: 50.1 # const
+    eK: -90.3 # const
+    eCa: 131.1 # const
+dt: 0.025 # ms
+t_max: 150.0 # ms
+t_filter: 10.0 # ms to filter out before and after the trace
+avg_scale: 4 # Factor for compressing the voltage trace
+n_param_sweep: 5
+save_path: "./data/voltage_traces"
+current:
+  delay: 40.0
+  duration: 70.0
+  amp_min: 0.0015 # microA
+  amp_max: 0.0025 # microA
+  amp_step: 0.0001

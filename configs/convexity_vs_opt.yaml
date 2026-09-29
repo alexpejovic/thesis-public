@@ -1,0 +1,66 @@
+# Convexity descriptors vs the region-of-success optimization score: plot knobs.
+#
+# Read by every scripts/plotting/plot_convexity_vs_opt_*.py, so the loss set, the
+# optimizer arm and the output path are defined exactly once. The SCORE itself is
+# defined in scripts/datagen/gen_region_success_scores.py -- the join imports
+# `ladder_score` and `SUCCESS_RADII` from there rather than restating them.
+#
+# NOTE on the flag-generation convention: these scripts use hand-written argparse
+# rather than the `_parse_args`-from-YAML auto-flag pattern, because `losses` and
+# `radii` are list-valued -- `type=type(v)` turns a list default into `type=list`
+# and argparse shreds the tokens into single characters (the trap
+# README_studies.md documents). Same deliberate deviation as
+# configs/region_scores.yaml and configs/beta_mse.yaml.
+
+# --- inputs ------------------------------------------------------------------
+
+# The landscape descriptors: 56 sets x 8 losses x 6 descriptors x 100 ideal seeds,
+# swept on a 91^3 grid over +-1.5. Written 2026-08-21.
+convexity_path: ./data/convexity-scores.jsonl
+
+# The optimization score. Written 2026-08-28/29, i.e. AFTER the 2026-08-26 venv
+# reinstall that the convexity file predates. See the caveat in the task doc:
+# the descriptors come off a static grid rather than a 100-step trajectory, so
+# they are not subject to the chaotic amplification that made the old
+# optimization scores irreproducible -- but this join does cross that boundary
+# and the figures say so.
+score_path: ./data/optimization-region-scores.jsonl
+
+# --- outputs -----------------------------------------------------------------
+
+# Deliberately NOT ./plots/convexity_vs_opt, which holds the 2026-08-26 figures
+# built on the retired mean-final-distance score. Comparing old against new is
+# the point of this study, so both have to survive.
+plot_path: ./plots/convexity_vs_opt_region
+
+# --- what to correlate --------------------------------------------------------
+
+# The three losses under comparison. All three are present in BOTH stores under
+# exactly these names, so the join needs no mapping.
+#   encoder-zscore       2026_08_12_15_20_26_225838  ZScoreGlobal, masking off
+#   mse-zscore           the MSE floor, same normalizer -- the reference series
+#   encoder-zscore-mask  2026_08_12_15_20_52_343885  ZScoreGlobal, masking on
+losses: [encoder-zscore, mse-zscore, encoder-zscore-mask]
+
+# The region store holds a polyak and an adam arm. Polyak is the optimizer behind
+# the published old correlations, so choosing it keeps new-vs-old a difference of
+# score alone.
+optimizer: polyak
+
+# Score the BEST iterate, not the final one. Under polyak roughly 60% of runs end
+# farther from the truth than they started (d_final p50 3.15 against d0 p50 1.79)
+# while d_best p50 is 1.77 -- the optimizer passes near the truth and wanders
+# off, so d_final largely measures where a diverging run stopped. A convexity
+# descriptor is a claim about whether the landscape LETS the optimizer find the
+# neuron, which is the best iterate. `raw_d_final` is available for contrast.
+matrix: raw_d_best
+
+# MUST equal gen_region_success_scores.SUCCESS_RADII -- asserted at load, so this
+# file can never silently redefine the score. Listed here only so a reader does
+# not have to open the generator to know what the ladder is.
+radii: [0.09375, 0.1875, 0.375, 0.75, 1.5]
+
+# The headline descriptor. Its wide-basin tolerance is 0.375 -- the middle rung of
+# the ladder above -- so this one cell asks the landscape question and the
+# optimization question at the same radius.
+headline_stat: basin_wide

@@ -1,0 +1,57 @@
+# Admin and Documents
+admin/
+*.pdf
+*.html
+
+# Notes for unpublished works
+papers/hidden
+
+# Python
+.python-version
+.venv
+__pycache__/
+
+# Data and Logs
+data/
+logs/
+plots/
+studies/
+# Still include studies configs
+!encoding/configs/studies/
+*.csv
+*.png
+*.pkl
+*.h5
+*.xlsx
+.index
+*.data*
+tmp*
+*.svg
+
+# Snakemake
+.snakemake/
+
+# Environments
+.env
+
+# Latex output
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.bbl
+*.bbl-SAVE-ERROR
+*.bib
+*.blg
+*.bcf
+*.run.xml
+*.nav
+*.snm
+*.vrb
+*.bcf-SAVE-ERROR
+
+# Archives
+report/archives

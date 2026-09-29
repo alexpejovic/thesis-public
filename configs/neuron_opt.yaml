@@ -1,0 +1,24 @@
+channel_type: Pospischil
+encoder_datestr: latest
+encoder_epoch: null
+feat_loss: mean
+freeze_params:
+  - Leak_gLeak
+  - Leak_eLeak
+  # - Na_gNa
+  # - K_gK
+  - Km_gKm
+  - CaL_gCaL
+  - Km_taumax
+  - vt
+seed: 1001
+vae_type: TimeVAEBase
+opt_bounds: [-6, 6]
+# opt_samples: 4001
+learning_rate: 0.01
+optimizer: polyak
+start_dist: 0.2
+dist_stepsize: 0.2
+base_train_steps: 150
+train_steps_scaler: 50
+failure_distance: 0.1

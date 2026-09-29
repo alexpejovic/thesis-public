@@ -1,0 +1,17 @@
+learning_rate: 0.0003
+steps: 500
+seed: 1001
+vae_type: TimeVAEBase
+encoder_datestr: latest
+encoder_epoch: 706150
+freeze_params:
+  - Leak_gLeak
+  - Leak_eLeak
+  # - Na_gNa
+  - K_gK
+  - Km_gKm
+  - CaL_gCaL
+  - Km_taumax
+  - vt
+channel_type: Pospischil
+feat_loss: kl

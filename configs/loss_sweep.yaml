@@ -1,0 +1,17 @@
+channel_type: Pospischil
+encoder_datestr: latest
+encoder_epoch: null
+feat_loss: kl
+freeze_params:
+  - Leak_gLeak
+  - Leak_eLeak
+  # - Na_gNa
+  - K_gK
+  - Km_gKm
+  - CaL_gCaL
+  - Km_taumax
+  - vt
+seed: 1001
+vae_type: TimeVAEBase
+opt_bounds: [-6, 6]
+opt_samples: 2001
